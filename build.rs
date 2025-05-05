@@ -49,6 +49,7 @@ fn main() {
       .cpp(true)
       .file("src/run.hip")
       .define("IO", None)
+      .flag("-w")  // Tempararily supress all warnings as some cannot be supressed individually TODO : Actually fix the warnings
       .compile("hvm-rocm");
     println!("cargo:rustc-cfg=feature=\"hip\"");
   }
