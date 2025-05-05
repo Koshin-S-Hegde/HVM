@@ -1,3 +1,4 @@
+#include "hip_check.h"
 #include "hip/hip_runtime.h"
 #include <dlfcn.h>
 #include <errno.h>
@@ -267,20 +268,20 @@ __global__ void make_bytes_port(GNet* gnet, Bytes bytes, Port* ret) {
 // - λt (((t CONS) head) tail)
 extern "C" Port gnet_inject_bytes(GNet* gnet, Bytes *bytes) {
   Port* d_ret;
-  hipMalloc(&d_ret, sizeof(Port));
+  HIP_CHECK(hipMalloc(&d_ret, sizeof(Port)));
 
   Bytes bytes_cu;
   bytes_cu.len = bytes->len;
 
-  hipMalloc(&bytes_cu.buf, sizeof(char) * bytes_cu.len);
-  hipMemcpy(bytes_cu.buf, bytes->buf, sizeof(char) * bytes_cu.len, hipMemcpyHostToDevice);
+  HIP_CHECK(hipMalloc(&bytes_cu.buf, sizeof(char) * bytes_cu.len));
+  HIP_CHECK(hipMemcpy(bytes_cu.buf, bytes->buf, sizeof(char) * bytes_cu.len, hipMemcpyHostToDevice));
 
   make_bytes_port<<<1,1>>>(gnet, bytes_cu, d_ret);
 
   Port ret;
-  hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost);
-  hipFree(d_ret);
-  hipFree(bytes_cu.buf);
+  HIP_CHECK(hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost));
+  HIP_CHECK(hipFree(d_ret));
+  HIP_CHECK(hipFree(bytes_cu.buf));
 
   return ret;
 }
@@ -318,13 +319,13 @@ __global__ void make_ok_port(GNet* gnet, Port val, Port* ret) {
 
 extern "C" Port gnet_inject_ok(GNet* gnet, Port val) {
   Port* d_ret;
-  hipMalloc(&d_ret, sizeof(Port));
+  HIP_CHECK(hipMalloc(&d_ret, sizeof(Port)));
 
   make_ok_port<<<1,1>>>(gnet, val, d_ret);
 
   Port ret;
-  hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost);
-  hipFree(d_ret);
+  HIP_CHECK(hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost));
+  HIP_CHECK(hipFree(d_ret));
 
   return ret;
 }
@@ -363,13 +364,13 @@ __global__ void make_err_port(GNet* gnet, Port val, Port* ret) {
 
 extern "C" Port gnet_inject_err(GNet* gnet, Port val) {
   Port* d_ret;
-  hipMalloc(&d_ret, sizeof(Port));
+  HIP_CHECK(hipMalloc(&d_ret, sizeof(Port)));
 
   make_err_port<<<1,1>>>(gnet, val, d_ret);
 
   Port ret;
-  hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost);
-  hipFree(d_ret);
+  HIP_CHECK(hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost));
+  HIP_CHECK(hipFree(d_ret));
 
   return ret;
 }
@@ -425,13 +426,13 @@ __global__ void make_io_err_port(GNet* gnet, IOError err, Port* ret) {
 
 extern "C" Port gnet_inject_io_err(GNet* gnet, IOError err) {
   Port* d_ret;
-  hipMalloc(&d_ret, sizeof(Port));
+  HIP_CHECK(hipMalloc(&d_ret, sizeof(Port)));
 
   make_io_err_port<<<1,1>>>(gnet, err, d_ret);
 
   Port ret;
-  hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost);
-  hipFree(d_ret);
+  HIP_CHECK(hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost));
+  HIP_CHECK(hipFree(d_ret));
 
   return ret;
 }
@@ -468,21 +469,20 @@ extern "C" Port gnet_inject_io_err_inner(GNet* gnet, Port val) {
 /// `err` must be `NUL`-terminated.
 extern "C" Port gnet_inject_io_err_str(GNet* gnet, char* err) {
   Port* d_bytes_port;
-  hipMalloc(&d_bytes_port, sizeof(Port));
+  HIP_CHECK(hipMalloc(&d_bytes_port, sizeof(Port)));
 
   Bytes bytes_cu;
   bytes_cu.len = strlen(err);
 
-  hipMalloc(&bytes_cu.buf, sizeof(char) * bytes_cu.len);
-  hipMemcpy(bytes_cu.buf, err, sizeof(char) * bytes_cu.len, hipMemcpyHostToDevice);
+  HIP_CHECK(hipMalloc(&bytes_cu.buf, sizeof(char) * bytes_cu.len));
+  HIP_CHECK(hipMemcpy(bytes_cu.buf, err, sizeof(char) * bytes_cu.len, hipMemcpyHostToDevice));
 
   make_bytes_port<<<1,1>>>(gnet, bytes_cu, d_bytes_port);
 
   Port bytes_port;
-  hipMemcpy(&bytes_port, d_bytes_port, sizeof(Port), hipMemcpyDeviceToHost);
-  hipFree(d_bytes_port);
-
-  hipFree(bytes_cu.buf);
+  HIP_CHECK(hipMemcpy(&bytes_port, d_bytes_port, sizeof(Port), hipMemcpyDeviceToHost));
+  HIP_CHECK(hipFree(d_bytes_port));
+  HIP_CHECK(hipFree(bytes_cu.buf));
 
   return gnet_inject_io_err_inner(gnet, bytes_port);
 }
@@ -779,8 +779,7 @@ Port io_dl_open(GNet* gnet, Port argm) {
       return gnet_inject_ok(gnet, new_port(NUM, new_u24(dl)));
     }
   }
-
-  return gnet_inject_io_err_str(gnet, "too many open dylibs");
+  return gnet_inject_io_err_str(gnet, (char*) "too many open dylibs");
 }
 
 // Calls a function from a loaded dylib.
@@ -848,7 +847,7 @@ void book_init(Book* book) {
   book->ffns_buf[book->ffns_len++] = (FFn){"DL_CALL", io_dl_call};
   book->ffns_buf[book->ffns_len++] = (FFn){"DL_CLOSE", io_dl_open};
 
-  hipMemcpyToSymbol(HIP_SYMBOL(BOOK), book, sizeof(Book));
+  HIP_CHECK(hipMemcpyToSymbol(HIP_SYMBOL(BOOK), book, sizeof(Book)));
 }
 
 // Monadic IO Evaluator

@@ -1,6 +1,9 @@
-#include "hip/hip_runtime.h"
+#include "hip_check.h"
+#include <__clang_hip_runtime_wrapper.h>
+#include <hip/amd_detail/amd_hip_runtime.h>
 #define INTERPRETED
 #define WITHOUT_MAIN
+
 
 #ifdef DEBUG
   #define debug(...) printf(__VA_ARGS__)
@@ -402,7 +405,7 @@ __device__ void block_print(u32 x) {
 
   if (TID() == 0) {
     for (u32 i = 0; i < TPB; ++i) {
-      printf("%x", min(value[i],0xF));
+      printf("%x", (uint) min(value[i],0xF));
     }
   }
   __syncthreads();
@@ -1776,7 +1779,7 @@ __global__ void initialize(GNet* gnet) {
 
 GNet* gnet_create() {
   GNet *gnet;
-  hipMalloc((void**)&gnet, sizeof(GNet));
+  HIP_CHECK(hipMalloc((void**)&gnet, sizeof(GNet)));
   initialize<<<BPG, TPB>>>(gnet);
   //hipMemset(gnet, 0, sizeof(GNet));
   return gnet;
@@ -1785,22 +1788,22 @@ GNet* gnet_create() {
 u32 gnet_get_rlen(GNet* gnet, u32 turn) {
   u32 rbag_use;
   if (turn % 2 == 0) {
-    hipMemcpy(&rbag_use, &gnet->rbag_use_B, sizeof(u32), hipMemcpyDeviceToHost);
+    HIP_CHECK(hipMemcpy(&rbag_use, &gnet->rbag_use_B, sizeof(u32), hipMemcpyDeviceToHost));
   } else {
-    hipMemcpy(&rbag_use, &gnet->rbag_use_A, sizeof(u32), hipMemcpyDeviceToHost);
+    HIP_CHECK(hipMemcpy(&rbag_use, &gnet->rbag_use_A, sizeof(u32), hipMemcpyDeviceToHost));
   }
   return rbag_use;
 }
 
 u64 gnet_get_itrs(GNet* gnet) {
   u64 itrs;
-  hipMemcpy(&itrs, &gnet->itrs, sizeof(u64), hipMemcpyDeviceToHost);
+  HIP_CHECK(hipMemcpy(&itrs, &gnet->itrs, sizeof(u64), hipMemcpyDeviceToHost));
   return itrs;
 }
 
 u64 gnet_get_leak(GNet* gnet) {
   u64 leak;
-  hipMemcpy(&leak, &gnet->leak, sizeof(u64), hipMemcpyDeviceToHost);
+  HIP_CHECK(hipMemcpy(&leak, &gnet->leak, sizeof(u64), hipMemcpyDeviceToHost));
   return leak;
 }
 
@@ -1842,20 +1845,20 @@ void gnet_normalize(GNet* gnet) {
 // Reads a device node to host
 Pair gnet_node_load(GNet* gnet, u32 loc) {
   Pair pair;
-  hipMemcpy(&pair, &gnet->node_buf[loc], sizeof(Pair), hipMemcpyDeviceToHost);
+  HIP_CHECK(hipMemcpy(&pair, &gnet->node_buf[loc], sizeof(Pair), hipMemcpyDeviceToHost));
   return pair;
 }
 
 // Reads a device var to host
 Port gnet_vars_load(GNet* gnet, u32 loc) {
   Pair port;
-  hipMemcpy(&port, &gnet->vars_buf[loc], sizeof(Port), hipMemcpyDeviceToHost);
+  HIP_CHECK(hipMemcpy(&port, &gnet->vars_buf[loc], sizeof(Port), hipMemcpyDeviceToHost));
   return port;
 }
 
 // Writes a host var to device
 void gnet_vars_create(GNet* gnet, u32 var, Port val) {
-  hipMemcpy(&gnet->vars_buf[var], &val, sizeof(Port), hipMemcpyHostToDevice);
+  HIP_CHECK(hipMemcpy(&gnet->vars_buf[var], &val, sizeof(Port), hipMemcpyHostToDevice));
 }
 
 // Like the enter() function, but from host and read-only
@@ -1886,10 +1889,10 @@ Port gnet_expand(GNet* gnet, Port port) {
 Port gnet_make_node(GNet* gnet, Tag tag, Port fst, Port snd) {
   Port ret;
   Port* d_ret;
-  hipMalloc(&d_ret, sizeof(Port));
+  HIP_CHECK(hipMalloc(&d_ret, sizeof(Port)));
   make_node<<<1,1>>>(gnet, tag, fst, snd, d_ret);
-  hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost);
-  hipFree(d_ret);
+  HIP_CHECK(hipMemcpy(&ret, d_ret, sizeof(Port), hipMemcpyDeviceToHost));
+  HIP_CHECK(hipFree(d_ret));
   return ret;
 }
 
@@ -2327,11 +2330,11 @@ extern "C" void hvm_hip(u32* book_buffer) {
 
       return;
     }
-    hipMemcpyToSymbol(HIP_SYMBOL(BOOK), book, sizeof(Book));
+    HIP_CHECK(hipMemcpyToSymbol(HIP_SYMBOL(BOOK), book, sizeof(Book)));
   }
 
   // Configures Shared Memory Size
-  hipFuncSetAttribute(reinterpret_cast<const void*>(evaluator), hipFuncAttributeMaxDynamicSharedMemorySize, sizeof(LNet));
+  HIP_CHECK(hipFuncSetAttribute(reinterpret_cast<const void*>(evaluator), hipFuncAttributeMaxDynamicSharedMemorySize, sizeof(LNet)));
 
   // Creates a new GNet
   GNet* gnet = gnet_create();
@@ -2348,7 +2351,7 @@ extern "C" void hvm_hip(u32* book_buffer) {
   gnet_normalize(gnet);
   #endif
 
-  hipDeviceSynchronize();
+  HIP_CHECK(hipDeviceSynchronize());
 
   // Stops the timer
   clock_t end = clock();
